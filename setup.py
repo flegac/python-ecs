@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='pygame-ecs',
+    name='python-ecs',
     version='0.1.0',
     packages=find_packages(),
     license='',
