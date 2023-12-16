@@ -1,132 +1,144 @@
-from typing import List, Dict, Type
+from enum import Enum, auto
+from typing import Type, Self, Iterable
 
-ComponentId = int
-EntityId = int
+from pydantic import Field
+
+from easy_lib.my_model import MyModel
+from easy_lib.timing import time_func
 
 
-class Component(object):
-    Type = Type['Component']
+class GenId:
+    def __init__(self):
+        self._next_id = 0
 
-    def __init__(self) -> None:
-        self._cid = ECS._generate_id()
-        self._eid = None  # type: EntityId
+    def new_id(self):
+        self._next_id += 1
+        return self._next_id
+
+
+type ComponentId = int
+type EntityId = int
+
+CID_GEN = GenId()
+EID_GEN = GenId()
+
+
+class Component(MyModel):
+    cid: ComponentId = Field(default_factory=CID_GEN.new_id)
+    eid: EntityId = -1
 
     @property
-    def cid(self) -> ComponentId:
-        return self._cid
-
-    @property
-    def eid(self) -> EntityId:
-        return self._eid
-
-    @eid.setter
-    def eid(self, eid: EntityId):
-        self._eid = eid
-
-    @property
-    def type_id(self) -> 'Component.Type':
+    def type_id(self):
         return self.__class__
 
+    def __str__(self):
+        params = ', '.join(f"{k}: {v}" for k, v in self.__dict__.items() if k not in {'cid', 'eid'})
+        return f'{self.type_id.__name__}({params})'
 
-class System(object):
-    Signature = List[Type['Component']]
-
-    Type = Type['System']
-
-    def __init__(self, component_signature: 'System.Signature'):
-        """
-        :param component_signature: list of component type ids as return by Component.type_id
-        """
-        self._signature = component_signature
-
-    def update(self, *args, **kwargs) -> None:
-        """
-        :param args: components in same order as the System.signature
-        :param kwargs: named parameter list : 'Component.type_id = component' (ex: MyComponent = component_instance))
-        :return:
-        """
-        raise NotImplementedError()
-
-    @property
-    def signature(self) -> 'System.Signature':
-        return self._signature
-
-    @property
-    def type_id(self) -> 'System.Type':
-        return self.__class__
+    def __repr__(self):
+        return str(self)
 
 
-class Entity(object):
-    def __init__(self, ecs: 'ECS', eid: EntityId):
-        self._ecs = ecs
-        self._eid = eid
-
-    @property
-    def eid(self) -> EntityId:
-        return self._eid
-
-    def get(self, ctype: Component.Type) -> Component:
-        components = self._ecs._components.get(ctype)
-        if not components:
-            return None
-        return components.get(self.eid)
-
-    def attach(self, component: Component):
-        assert isinstance(component, Component)
-        component.eid = self.eid
-        self._ecs._add_component(component)
-        return self
-
-
-class ECS(object):
-    _id_source = 0
+class UpdateStatus(MyModel):
+    dead_entities: set[EntityId] = Field(default_factory=set)
+    new_entities: list[list[Component]] = Field(default_factory=list)
 
     @staticmethod
-    def _generate_id():
-        ECS._id_source += 1
-        return ECS._id_source
+    def dead(eid: EntityId):
+        return UpdateStatus(dead_entities={eid})
 
-    def __init__(self):
-        self._systems = []  # type: List[System]
-        self._components = {}  # type: Dict[Component.Type, Dict[EntityId,Component]]
+    @staticmethod
+    def new(items: list[list[Component]]):
+        return UpdateStatus(new_entities=items)
 
-    def create(self, *components) -> Entity:
-        entity = Entity(self, self._generate_id())
-        for c in components:
-            entity.attach(c)
-        return entity
+    @time_func
+    def load(self, other: Self):
+        if other is None:
+            return
+        self.dead_entities.update(other.dead_entities)
+        self.new_entities.extend(other.new_entities)
 
-    def reset_systems(self, systems: List[System]):
-        self._systems = systems
-        return self
 
-    def add_system(self, system: System):
-        assert isinstance(system, System)
-        self._systems.append(system)
-        return self
+class CFilter(str, Enum):
+    requires_all = auto()
+    requires_any = auto()
+    match_all = auto()
 
+
+class System(MyModel):
+    signature: list[Type[Component]]
+    component_filter: CFilter = CFilter.requires_all
+
+    @time_func
+    def update_all(self, items: list[list[Type[Component | None]]]):
+        status = UpdateStatus()
+        for _ in items:
+            status.load(self.update(*_))
+        return status
+
+    def update(self, *args, **kwargs) -> UpdateStatus | None:
+        """
+        :param args: components in same order as the List[Type[Component]]
+        :param kwargs: named parameter list : 'Component.type_id = component' (ex: MyComponent = component_instance)
+        :return:
+        """
+        raise NotImplementedError
+
+
+class ECS(MyModel):
+    systems: list[System] = Field(default_factory=list)
+    components: dict[Type[Component], dict[EntityId, Component]] = Field(default_factory=dict)
+
+    @time_func
+    def new_entities(self, entities: list[list[Component]]):
+        for e in entities:
+            eid = EID_GEN.new_id()
+            for c in e:
+                self._add_component(eid, c)
+
+    @time_func
+    def destroy(self, ids: Iterable[EntityId]):
+        for c in self.components.values():
+            for eid in ids:
+                c.pop(eid, None)
+
+    @time_func
     def update(self):
-        for sys in self._systems:
-            first, *others = sys.signature
-            first_components = self._components[first]
-            for eid, first_component in first_components.items():
-                components_view = [self._components.get(_) for _ in others]
-                components_view = filter(None.__ne__, components_view)
-                other_components = [_.get(eid) for _ in components_view]
-                other_components = list(filter(None.__ne__, other_components))
+        status = UpdateStatus()
+        for sys in self.systems:
+            items = self.compute_components(sys)
+            status.load(sys.update_all(items))
+        self.destroy(status.dead_entities)
+        self.new_entities(status.new_entities)
 
-                if len(other_components) == len(others):
-                    sys.update(first_component, *other_components)
+    @time_func
+    def compute_components(self, sys: System):
+        signature = sys.signature
+        components = {
+            _: self.components.get(_, {})
+            for _ in signature
+        }
 
-    def _add_component(self, component: Component):
-        assert component.eid is not None
-        eid = component.eid
+        match sys.component_filter:
+            case CFilter.match_all:
+                signature = list(self.components.keys())
+                entities = set.union(*[set(_.keys()) for _ in self.components.values()])
+            case CFilter.requires_all:
+                entities = set.intersection(*[set(_.keys()) for _ in components.values()])
+            case CFilter.requires_any:
+                entities = set.union(*[set(_.keys()) for _ in components.values()])
 
+        return [
+            [self.components[ctype].get(eid) for ctype in signature]
+            for eid in entities
+        ]
+
+    def _add_component(self, eid: int, component: Component):
+        component.eid = eid
         comp_type = component.type_id
-        if comp_type not in self._components:
-            self._components[comp_type] = {}
-
-        self._components[comp_type][eid] = component
+        if comp_type not in self.components:
+            self.components[comp_type] = {}
+        self.components[comp_type][eid] = component
 
 
 # default simulator

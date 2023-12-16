@@ -1,64 +1,77 @@
-from python_ecs.ecs import sim, Component, System
+import uuid
+
+from pydantic import Field
+
+from easy_lib.timing import TimingTestCase, time_func
+from python_ecs.ecs import Component, System, ECS, CFilter, UpdateStatus
 
 
-class XComponent(Component):
-    def __init__(self, x: int) -> None:
-        super().__init__()
-        self.position = x
-
-    def __repr__(self):
-        return '{}: {}, x={}'.format(self.type_id.__name__, self.eid, self.position)
+class Position(Component):
+    x: int = 0
+    y: int = 0
 
 
-class YComponent(Component):
-    def __init__(self, y: int) -> None:
-        super().__init__()
-        self.position = y
+class Speed(Component):
+    x: int = 0
+    y: int = 0
 
-    def __repr__(self):
-        return '{}: {}, y={}'.format(self.type_id.__name__, self.eid, self.position)
+
+class Info(Component):
+    name: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
 class MoveSystem(System):
-    def __init__(self):
-        super().__init__([XComponent, YComponent])
+    @staticmethod
+    def create():
+        return MoveSystem(signature=[Position, Speed])
 
-    def update(self, x: XComponent, y: YComponent) -> None:
-        x.position += 1
-        y.position += 2
+    @time_func
+    def update(self, pos: Position, speed: Speed):
+        pos.x += speed.x
+        pos.y += speed.y
+        if pos.x > 3:
+            return UpdateStatus.dead(pos.eid)
 
 
 class LogSystem(System):
-    def __init__(self, ctype: Component.Type):
-        super().__init__([ctype])
+    component_filter: CFilter = CFilter.match_all
 
-    def update(self, c: Component):
-        print(c)
+    def update(self, *args):
+        eid = None
+        for _ in filter(None, args):
+            eid = _.eid
+            break
+        print(f'{eid}: {args}')
 
 
-def test_ecs():
-    # init systems
-    sim.reset_systems([
-        MoveSystem(),
-        LogSystem(XComponent),
-        LogSystem(YComponent)
-    ])
+class TestEcs(TimingTestCase):
 
-    # create some entities
-    sim.create(XComponent(x=3))
+    def test_ecs(self):
+        # init systems
+        sim = ECS(systems=[
+            LogSystem(signature=[Position, Speed]),
+        ])
 
-    sim.create() \
-        .attach(XComponent(x=1)) \
-        .attach(YComponent(y=2))
+        # create some entities
+        sim.new_entities([
+            [Info(), Position(x=3)],
+            [Position(y=2), Speed(y=2)],
+            [Info(), Position(x=6, y=6), Speed(x=2, y=1)],
+            [Info(), Speed(x=2, y=1)],
+            [Info()]
+        ])
 
-    sim.create(
-        XComponent(x=6),
-        YComponent(y=6)
-    )
+        # run simulation
+        print('* update')
+        sim.update()
+        print('* update')
+        sim.update()
 
-    # run simulation
-    print('update')
-    sim.update()
+        # update systems
+        sim.systems.insert(0, MoveSystem.create())
 
-    print('update')
-    sim.update()
+        print('* update (move)')
+        sim.update()
+
+        print('update (move)')
+        sim.update()
