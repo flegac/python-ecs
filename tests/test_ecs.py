@@ -3,7 +3,8 @@ import uuid
 from pydantic import Field
 
 from easy_lib.timing import TimingTestCase, time_func
-from python_ecs.ecs import Component, System, ECS, CFilter, UpdateStatus
+from python_ecs.ecs import Component, System, ECS, UpdateStatus
+from python_ecs.log_system import LogSystem
 
 
 class Position(Component):
@@ -31,17 +32,6 @@ class MoveSystem(System):
         pos.y += speed.y
         if pos.x > 3:
             return UpdateStatus.dead(pos.eid)
-
-
-class LogSystem(System):
-    component_filter: CFilter = CFilter.match_all
-
-    def update(self, *args):
-        eid = None
-        for _ in filter(None, args):
-            eid = _.eid
-            break
-        print(f'{eid}: {args}')
 
 
 class TestEcs(TimingTestCase):

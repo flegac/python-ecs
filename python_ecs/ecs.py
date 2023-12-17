@@ -26,6 +26,7 @@ EID_GEN = GenId()
 class Component(MyModel):
     cid: ComponentId = Field(default_factory=CID_GEN.new_id)
     eid: EntityId = -1
+    active: bool = True
 
     @property
     def type_id(self):
@@ -85,22 +86,69 @@ class System(MyModel):
         raise NotImplementedError
 
 
+class Components(MyModel):
+    ctype: Type[Component]
+    active: dict[EntityId, Component] = Field(default_factory=dict)
+    inactive: dict[EntityId, Component] = Field(default_factory=dict)
+
+    def remove(self, eid: EntityId):
+        self.active.pop(eid, None)
+        self.inactive.pop(eid, None)
+
+    def remove_all(self, eids: Iterable[EntityId]):
+        for _ in eids:
+            self.remove(_)
+
+    def add(self, eid: int, component: Component):
+        component.eid = eid
+        if component.active:
+            self.active[eid] = component
+        else:
+            self.inactive[eid] = component
+
+
 class ECS(MyModel):
     systems: list[System] = Field(default_factory=list)
-    components: dict[Type[Component], dict[EntityId, Component]] = Field(default_factory=dict)
+    components: dict[Type[Component], Components] = Field(default_factory=dict)
+
+    @property
+    @time_func
+    def entities(self) -> set[EntityId]:
+        return set().union(*[set(_.active.keys()) for _ in self.components.values()])
+
+    @time_func
+    def union_entities(self, signature: list[Type[Component]]):
+        res = set()
+        for _ in signature:
+            res.update(self.components[_].active.keys())
+        return res
+
+    @time_func
+    def common_entities(self, signature: list[Type[Component]]):
+        if not signature:
+            return set()
+        first = signature[0]
+        res = set(self.components[first].active.keys())
+        for _ in signature[1:]:
+            res.intersection_update(self.components[first].active.keys())
+            if not res:
+                return res
+        return res
 
     @time_func
     def new_entities(self, entities: list[list[Component]]):
-        for e in entities:
+        for components in entities:
             eid = EID_GEN.new_id()
-            for c in e:
-                self._add_component(eid, c)
+            for c in components:
+                ctype = c.type_id
+                if ctype not in self.components:
+                    self.components[ctype] = Components(ctype=ctype)
+                self.components[ctype].add(eid, c)
 
     @time_func
     def destroy(self, ids: Iterable[EntityId]):
         for c in self.components.values():
-            for eid in ids:
-                c.pop(eid, None)
+            c.remove_all(ids)
 
     @time_func
     def update(self):
@@ -113,32 +161,22 @@ class ECS(MyModel):
 
     @time_func
     def compute_components(self, sys: System):
-        signature = sys.signature
-        components = {
-            _: self.components.get(_, {})
-            for _ in signature
-        }
-
         match sys.component_filter:
             case CFilter.match_all:
                 signature = list(self.components.keys())
-                entities = set.union(*[set(_.keys()) for _ in self.components.values()])
+                entities = self.entities
             case CFilter.requires_all:
-                entities = set.intersection(*[set(_.keys()) for _ in components.values()])
+                signature = sys.signature
+                entities = self.common_entities(signature)
             case CFilter.requires_any:
-                entities = set.union(*[set(_.keys()) for _ in components.values()])
-
+                signature = sys.signature
+                entities = self.union_entities(signature)
+            case _:
+                raise NotImplementedError
         return [
-            [self.components[ctype].get(eid) for ctype in signature]
+            [self.components[_].active.get(eid) for _ in signature]
             for eid in entities
         ]
-
-    def _add_component(self, eid: int, component: Component):
-        component.eid = eid
-        comp_type = component.type_id
-        if comp_type not in self.components:
-            self.components[comp_type] = {}
-        self.components[comp_type][eid] = component
 
 
 # default simulator
