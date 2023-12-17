@@ -1,12 +1,12 @@
-from python_ecs.ecs import System, CFilter
+from python_ecs.ecs import System, CFilter, Component
 
 
 class LogSystem(System):
-    component_filter: CFilter = CFilter.match_all
+    cfilter: CFilter = CFilter.match_all
 
-    def update(self, *args):
+    def update(self, items: list[Component]):
         eid = None
-        for _ in filter(None, args):
+        for _ in filter(None, items):
             eid = _.eid
             break
-        print(f'{eid}: {args}')
+        print(f'{eid}: {items}')
