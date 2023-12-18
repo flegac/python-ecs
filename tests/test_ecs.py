@@ -1,11 +1,13 @@
 import uuid
-from typing import Type
 
 from pydantic import Field
 
 from easy_lib.timing import TimingTestCase, time_func
-from python_ecs.ecs import Component, System, ECS, UpdateStatus, Signature
-from python_ecs.log_system import LogSystem
+from python_ecs.component import Component, Signature
+from python_ecs.ecs import ECS
+from python_ecs.entity_filter import EntityFilter
+from python_ecs.system import System
+from python_ecs.update_status import UpdateStatus
 
 
 class Position(Component):
@@ -27,22 +29,33 @@ class Move(Signature):
     speed: Speed
 
 
-class MoveSystem(System):
-    signature: Type[Signature] = Move
+class MoveSystem(System[Move]):
+    _signature = Move
 
     @time_func
-    def update(self, item: Move):
+    def update_single(self, item: Move):
         item.pos.x += item.speed.x
         item.pos.y += item.speed.y
         if item.pos.x > 3:
-            return UpdateStatus.dead(item.eid)
+            return UpdateStatus.remove(item.eid)
         if item.speed.y == 0:
-            return UpdateStatus.create([
+            return UpdateStatus.add([
                 [Info()],
                 [Info()],
                 [Info(), Position(x=0, y=10), Speed(x=0, y=2)],
                 [Info(), Position(x=100, y=100)],
             ])
+
+
+class LogSystem(System):
+    _filter_strategy = EntityFilter.match_all
+
+    def update_single(self, items: list[Component]):
+        eid = None
+        for _ in filter(None, items):
+            eid = _.eid
+            break
+        print(f'{eid}: {items}')
 
 
 class TestEcs(TimingTestCase):
@@ -54,8 +67,8 @@ class TestEcs(TimingTestCase):
         ])
 
         # create some entities
-        sim.new_entities([
-            [Info()],
+        sim.create([
+            Info(),
             [Info(), Position(x=3)],
             [Info(), Speed(x=2, y=1)],
             [Position(y=2), Speed(y=2)],
