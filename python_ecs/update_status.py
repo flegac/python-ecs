@@ -18,7 +18,7 @@ class UpdateStatus(MyModel):
 
     @staticmethod
     def remove(ids: EntityId | Iterable[EntityId]):
-        if isinstance(ids, EntityId):
+        if isinstance(ids, int):
             ids = [ids]
         return UpdateStatus(death=set(ids))
 
