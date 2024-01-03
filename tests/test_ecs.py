@@ -7,7 +7,7 @@ from python_ecs.component import Component, Signature
 from python_ecs.ecs import ECS
 from python_ecs.entity_filter import EntityFilter
 from python_ecs.system import System
-from python_ecs.update_status import UpdateStatus
+from python_ecs.update_status import Demography
 
 
 class Position(Component):
@@ -37,9 +37,9 @@ class MoveSystem(System[Move]):
         item.pos.x += item.speed.x
         item.pos.y += item.speed.y
         if item.pos.x > 3:
-            return UpdateStatus.remove(item.eid)
+            return Demography.remove(item.eid)
         if item.speed.y == 0:
-            return UpdateStatus.add([
+            return Demography.add([
                 [Info()],
                 [Info()],
                 [Info(), Position(x=0, y=10), Speed(x=0, y=2)],

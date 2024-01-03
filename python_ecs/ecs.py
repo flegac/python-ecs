@@ -11,7 +11,7 @@ from python_ecs.component import Component, Signature
 from python_ecs.storage.database import Database
 from python_ecs.system import System
 from python_ecs.types import EntityId
-from python_ecs.update_status import UpdateStatus
+from python_ecs.update_status import Demography
 
 
 @dataclass
@@ -58,18 +58,18 @@ class ECS(MyModel):
     def entity(self, eid: EntityId):
         return Entity(eid=eid, ecs=self)
 
-    def create_single(self, item: Component | list[Component]):
+    def new_entity(self, item: list[Component] | Component | None):
         return self.create([item])
 
     @time_func
-    def create(self, items: list[Component | list[Component]]):
-        status = UpdateStatus.add(items)
+    def create(self, items: list[list[Component] | Component]):
+        demography = Demography.add(items)
         self.db.new_entities(items)
         for sys in self.systems:
-            sys.update_demography(status)
+            sys.update_demography(demography)
 
     def destroy(self, ids: Iterable[EntityId]):
-        status = UpdateStatus.remove(ids)
+        status = Demography.remove(ids)
         for sys in self.systems:
             sys.update_demography(status)
 
@@ -77,7 +77,7 @@ class ECS(MyModel):
 
     @time_func
     def update(self):
-        status = UpdateStatus()
+        status = Demography()
         for sys in self.systems:
             try:
                 status.load(sys.update(self.db))

@@ -8,7 +8,7 @@ from python_ecs.component import Component, Signature
 from python_ecs.entity_filter import EntityFilter
 from python_ecs.storage.database import Database
 from python_ecs.types import EntityId
-from python_ecs.update_status import UpdateStatus
+from python_ecs.update_status import Demography
 
 
 class System[T: Signature | Component](MyModel):
@@ -16,16 +16,16 @@ class System[T: Signature | Component](MyModel):
     _filter_strategy = EntityFilter.requires_all
     items: dict[EntityId, T] = Field(default_factory=dict)
 
-    def update_single(self, item: T) -> UpdateStatus | None:
+    def update_single(self, item: T) -> Demography | None:
         pass
 
-    def update_before(self, db: Database) -> UpdateStatus | None:
+    def update_before(self, db: Database) -> Demography | None:
         pass
 
-    def update_after(self, db: Database) -> UpdateStatus | None:
+    def update_after(self, db: Database) -> Demography | None:
         pass
 
-    def update_demography(self, status: UpdateStatus):
+    def update_demography(self, status: Demography):
         if self._signature is None:
             return
 
@@ -46,16 +46,16 @@ class System[T: Signature | Component](MyModel):
     def unregister(self, item: T):
         pass
 
-    def update(self, db: Database) -> UpdateStatus:
+    def update(self, db: Database) -> Demography:
         with timing(f'{self.__class__.__name__}.update'):
-            status = UpdateStatus()
+            status = Demography()
             status.load(self.update_before(db))
             status.load(self.update_all(db))
             status.load(self.update_after(db))
             return status
 
     def update_all(self, db: Database):
-        status = UpdateStatus()
+        status = Demography()
         items = list(self.items.values())
         if self._filter_strategy is EntityFilter.match_none:
             items = []

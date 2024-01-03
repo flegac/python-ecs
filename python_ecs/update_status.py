@@ -8,19 +8,19 @@ from python_ecs.component import Component
 from python_ecs.types import EntityId
 
 
-class UpdateStatus(MyModel):
-    birth: list[Component | list[Component]] = Field(default_factory=list)
+class Demography(MyModel):
+    birth: list[list[Component] | Component] = Field(default_factory=list)
     death: set[EntityId] = Field(default_factory=set)
 
     @staticmethod
-    def add(items: list[Component | list[Component]]):
-        return UpdateStatus(birth=items)
+    def add(items: list[list[Component] | Component]):
+        return Demography(birth=items)
 
     @staticmethod
     def remove(ids: EntityId | Iterable[EntityId]):
         if isinstance(ids, int):
             ids = [ids]
-        return UpdateStatus(death=set(ids))
+        return Demography(death=set(ids))
 
     @time_func
     def load(self, other: Self):

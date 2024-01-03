@@ -8,7 +8,7 @@ from python_ecs.component import Component
 from python_ecs.storage.components import Components
 from python_ecs.id_generator import IdGenerator
 from python_ecs.types import EntityId
-from python_ecs.update_status import UpdateStatus
+from python_ecs.update_status import Demography
 
 EID_GEN = IdGenerator()
 
@@ -23,17 +23,17 @@ class Database(MyModel):
             yield _
 
     @time_func
-    def update_demography(self, status: UpdateStatus):
+    def update_demography(self, status: Demography):
         self.destroy(status.death)
         self.new_entities(status.birth)
 
     @time_func
-    def new_entities(self, entities: list[Component | list[Component]]):
+    def new_entities(self, entities: list[list[Component] | Component]):
         for components in entities:
             if components:
                 self.add(EntityId(EID_GEN.new_id()), components)
 
-    def add(self, eid: EntityId, components: Component | list[Component]):
+    def add(self, eid: EntityId, components: list[Component] | Component):
         if isinstance(components, Component):
             components = [components]
         for c in components:
