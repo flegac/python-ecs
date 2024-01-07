@@ -1,4 +1,5 @@
 import uuid
+from typing import override
 
 from pydantic import Field
 
@@ -33,6 +34,7 @@ class MoveSystem(System[Move]):
     _signature = Move
 
     @time_func
+    @override
     def update_single(self, item: Move):
         item.pos.x += item.speed.x
         item.pos.y += item.speed.y
@@ -50,6 +52,7 @@ class MoveSystem(System[Move]):
 class LogSystem(System):
     _filter_strategy = EntityFilter.match_all
 
+    @override
     def update_single(self, items: list[Component]):
         eid = None
         for _ in filter(None, items):
