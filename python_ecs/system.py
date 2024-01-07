@@ -25,6 +25,7 @@ class System[T: Signature | Component](MyModel):
     def update_after(self, db: Database) -> Demography | None:
         pass
 
+    @time_func
     def update_demography(self, status: Demography):
         if self._signature is None:
             return
