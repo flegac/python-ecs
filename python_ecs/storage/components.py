@@ -11,7 +11,7 @@ class Components(MyModel):
     ctype: Type[Component]
     active: dict[EntityId, Component] = Field(default_factory=dict)
     inactive: dict[EntityId, Component] = Field(default_factory=dict)
-    force_update: dict[EntityId, Component] = Field(default_factory=dict)
+    update_required: dict[EntityId, Component] = Field(default_factory=dict)
 
     def remove(self, eid: EntityId):
         self.active.pop(eid, None)
