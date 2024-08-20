@@ -31,6 +31,11 @@ class Component(MyModel):
     def type_id(self):
         return self.__class__
 
+    @property
+    def entity(self):
+        from python_ecs.ecs import sim
+        return sim.entity(self.eid)
+
     def __str__(self):
         params = ', '.join(f"{k}: {v}" for k, v in self.__dict__.items() if k not in {'cid', 'eid'})
         return f'{self.type_id.__name__}({params})'
