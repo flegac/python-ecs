@@ -3,7 +3,7 @@ from typing import Self, Type
 
 from pydantic import Field, model_validator
 
-from easy_lib.my_model import MyModel
+from easy_config.my_model import MyModel
 from easy_lib.timing import time_func
 from python_ecs.id_generator import IdGenerator
 from python_ecs.types import ComponentId, EntityId

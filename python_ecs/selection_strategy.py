@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Type
 
-from easy_lib.my_model import MyModel
+from easy_config.my_model import MyModel
 from python_ecs.component import Component, Signature
 from python_ecs.storage.database import Database
 from python_ecs.types import EntityId

@@ -2,7 +2,7 @@ from typing import Type, Iterable
 
 from pydantic import Field
 
-from easy_lib.my_model import MyModel
+from easy_config.my_model import MyModel
 from python_ecs.component import Component
 from python_ecs.types import EntityId
 

@@ -5,7 +5,7 @@ from typing import Iterable, Type
 from loguru import logger
 from pydantic import Field
 
-from easy_lib.my_model import MyModel
+from easy_config.my_model import MyModel
 from easy_lib.timing import time_func, timing
 from python_ecs.component import Component, Signature
 from python_ecs.storage.database import Database
