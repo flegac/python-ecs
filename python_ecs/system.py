@@ -3,7 +3,7 @@ from typing import Type
 from pydantic import Field
 
 from easy_config.my_model import MyModel
-from easy_lib.timing import time_func, timing
+from easy_kit.timing import time_func, timing
 from python_ecs.component import Component, Signature
 from python_ecs.entity_filter import EntityFilter
 from python_ecs.storage.database import Database
@@ -48,11 +48,14 @@ class System[T: Signature | Component](MyModel):
         pass
 
     def update(self, db: Database) -> Demography:
-        with timing(f'{self.__class__.__name__}.update'):
+        with timing(f'ECS.update.{self.__class__.__name__}'):
             status = Demography()
-            status.load(self.update_before(db))
-            status.load(self.update_all(db))
-            status.load(self.update_after(db))
+            with timing(f'ECS.update.{self.__class__.__name__}.update_before'):
+                status.load(self.update_before(db))
+            with timing(f'ECS.update.{self.__class__.__name__}.update_all'):
+                status.load(self.update_all(db))
+            with timing(f'ECS.update.{self.__class__.__name__}.update_after'):
+                status.load(self.update_after(db))
             return status
 
     def update_all(self, db: Database):

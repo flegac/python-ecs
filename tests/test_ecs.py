@@ -3,7 +3,7 @@ from typing import override
 
 from pydantic import Field
 
-from easy_lib.timing import TimingTestCase, time_func
+from easy_kit.timing import TimingTestCase, time_func
 from python_ecs.component import Component, Signature
 from python_ecs.ecs import ECS
 from python_ecs.entity_filter import EntityFilter

@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "python-ecs"
+version = "0.1.0"
+description = "Entity Component System"
+authors = ["flegac <florent.legac@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+repository = "https://github.com/flegac/python-ecs"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+easy-kit = "*"
+pydantic = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
