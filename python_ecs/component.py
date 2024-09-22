@@ -1,5 +1,5 @@
 import functools
-from typing import Self, Type, ClassVar
+from typing import Self, Type, Any
 
 from easy_kit.timing import time_func
 from pydantic import Field, model_validator
@@ -15,6 +15,8 @@ class Component(MyModel):
     cid: ComponentId = Field(default_factory=CID_GEN.new_id)
     eid: EntityId = -1
     is_active: bool = True
+
+    ecs: Any = None
 
     @classmethod
     def signature(cls) -> list[Type[Self]]:
@@ -33,18 +35,18 @@ class Component(MyModel):
 
     @property
     def entity(self):
-        from python_ecs.ecs import sim
-        return sim.entity(self.eid)
+        return self.ecs.entity(self.eid)
 
-    def __str__(self):
-        params = ', '.join(f"{k}: {v}" for k, v in self.__dict__.items() if k not in {'cid', 'eid'})
-        return f'{self.type_id.__name__}({params})'
-
-    def __repr__(self):
-        return str(self)
+    def get[T:Component](self, ctype: Type[T]) -> T | None:
+        return self.entity.get(ctype)
 
 
 class Signature(MyModel):
+
+    # def get[T: Component](self, ctype: Type[T]) -> T:
+    #     field = self.field_names()[0]
+    #     component = getattr(self, field)
+    #     return component.get(ctype)
 
     @property
     def eid(self):
@@ -52,18 +54,25 @@ class Signature(MyModel):
         item = getattr(self, name)
         return EntityId(item.eid)
 
+    def to_components(self) -> list[Component]:
+        return list(filter(None, [
+            getattr(self, name)
+            for name in self.field_names()
+        ]))
+
     @classmethod
     @functools.lru_cache()
     def signature(cls) -> list[Type[Component]]:
-        return [_.annotation for _ in cls.model_fields.values()]
+        return [cls.model_fields[_].annotation for _ in cls.field_names()]
 
     @classmethod
     @functools.lru_cache()
     def field_names(cls):
-        return list(cls.model_fields.keys())
+        return list(sorted(cls.model_fields.keys()))
 
     @classmethod
     @time_func
+    # @functools.lru_cache()
     def field_mapping(cls):
         return dict(zip(cls.signature(), cls.field_names()))
 
@@ -95,3 +104,7 @@ class Signature(MyModel):
         for name, _ in self.model_fields.items():
             if not isinstance(_.annotation, type(Component)):
                 raise ValueError(f'Signature: {name} type is [{_.annotation}] (must be a Component)')
+        return self
+
+
+ComponentSet = Component | list[Component] | Signature | None

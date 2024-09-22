@@ -1,71 +1,60 @@
 from typing import Type
 
-from pydantic import Field
+from easy_kit.timing import timing
+from pydantic import model_validator
 
 from easy_config.my_model import MyModel
-from easy_kit.timing import time_func, timing
 from python_ecs.component import Component, Signature
-from python_ecs.entity_filter import EntityFilter
+from python_ecs.entity_filter import FilterStrategy
 from python_ecs.storage.database import Database
-from python_ecs.types import EntityId
 from python_ecs.update_status import Demography
 
 
 class System[T: Signature | Component](MyModel):
-    _signature: Type[T] | None = None
-    _filter_strategy = EntityFilter.requires_all
-    items: dict[EntityId, T] = Field(default_factory=dict)
+    _signature: Type[T] = None
+    _filter_strategy: FilterStrategy = FilterStrategy.requires_all
+    periodicity_sec: float = 0  # expected (or minimum) time between two updates
 
-    def update_single(self, item: T) -> Demography | None:
+    def at_interval(self, periodicity_sec: float):
+        self.periodicity_sec = periodicity_sec
+        return self
+
+    def update_single(self, item: T, dt: float) -> Demography:
         pass
 
-    def update_before(self, db: Database) -> Demography | None:
+    def update_before(self, db: Database, dt: float) -> Demography:
         pass
 
-    def update_after(self, db: Database) -> Demography | None:
+    def update_after(self, db: Database, dt: float) -> Demography:
         pass
 
-    @time_func
-    def update_demography(self, status: Demography):
-        if self._signature is None:
-            return
-
-        for _ in status.death:
-            item = self.items.pop(_, None)
-            if item:
-                self.unregister(item)
-        for _ in status.birth:
-            if isinstance(_, Component):
-                _ = [_]
-            item = self.cast(_)
-            if item is not None:
-                self.auto_register(item)
-
-    def register(self, item: T):
+    def register(self, item: T) -> Demography:
         pass
 
-    def unregister(self, item: T):
+    def unregister(self, item: T) -> Demography:
         pass
 
-    def update(self, db: Database) -> Demography:
-        with timing(f'ECS.update.{self.__class__.__name__}'):
-            status = Demography()
-            with timing(f'ECS.update.{self.__class__.__name__}.update_before'):
-                status.load(self.update_before(db))
-            with timing(f'ECS.update.{self.__class__.__name__}.update_all'):
-                status.load(self.update_all(db))
-            with timing(f'ECS.update.{self.__class__.__name__}.update_after'):
-                status.load(self.update_after(db))
-            return status
-
-    def update_all(self, db: Database):
+    def update(self, db: Database, dt: float) -> Demography:
+        # with timing(f'ECS.update.{self.__class__.__name__}'):
         status = Demography()
-        items = list(self.items.values())
-        if self._filter_strategy is EntityFilter.match_none:
+        with timing(f'ECS.update.{self.__class__.__name__}.update_before'):
+            status.load(self.update_before(db, dt))
+        with timing(f'ECS.update.{self.__class__.__name__}.update_all'):
+            status.load(self.update_all(db, dt))
+        with timing(f'ECS.update.{self.__class__.__name__}.update_after'):
+            status.load(self.update_after(db, dt))
+        return status
+
+    def update_all(self, db: Database, dt: float):
+        status = Demography()
+        if self._filter_strategy is FilterStrategy.match_none:
             items = []
+        else:
+            items = list(db.get_index(self).items.values())
+            # items = list(self.items.values())
 
         for item in items:
-            status.load(self.update_single(item))
+            status.load(self.update_single(item, dt))
         return status
 
     def cast(self, items: list[Component]):
@@ -73,9 +62,13 @@ class System[T: Signature | Component](MyModel):
             return items
         return self._signature.cast(items)
 
-    @time_func
-    def auto_register(self, item: T):
-        if item.eid in self.items:
-            return
-        self.items[item.eid] = item
-        self.register(item)
+    @model_validator(mode='after')
+    def post_init(self):
+        if self._filter_strategy is FilterStrategy.match_none:
+            return self
+        if self._filter_strategy is FilterStrategy.match_all:
+            return self
+
+        if not isinstance(self._signature, type):
+            raise ValueError(f'{self.__class__}: Undefined signature: {self._signature}')
+        return self
