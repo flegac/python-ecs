@@ -2,12 +2,12 @@ from typing import Type, Iterable, Generator, Any
 
 from easy_kit.timing import time_func
 
-from python_ecs.component import Component, Signature
+from python_ecs.component import Component, Signature, ComponentSet
+from python_ecs.demography import Demography
 from python_ecs.id_generator import IdGenerator
 from python_ecs.storage.components import Components
 from python_ecs.storage.index import Index
 from python_ecs.types import EntityId
-from python_ecs.update_status import Demography
 
 EID_GEN = IdGenerator()
 
@@ -17,7 +17,13 @@ class Database:
         self.components: dict[Type[Component], Components] = {}
         self.indexes: dict[Type[Signature], Index] = {}
         self.ecs: Any = None
-        self.dirty: Demography
+        self.dirty: Demography = Demography()
+
+    def register(self, items: list[ComponentSet]):
+        self.dirty.with_birth(items)
+
+    def register_destroy(self, ids: EntityId | Iterable[EntityId]):
+        self.dirty.with_death(ids)
 
     def get_index(self, sys: 'System'):
         if sys._signature not in self.indexes:

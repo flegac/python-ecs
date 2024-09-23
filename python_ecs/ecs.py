@@ -7,10 +7,10 @@ from easy_kit.timing import time_func, timing
 from loguru import logger
 
 from python_ecs.component import Component, Signature
+from python_ecs.demography import Demography
 from python_ecs.storage.database import Database
-from python_ecs.system import System
+from python_ecs.system import System, SystemBag
 from python_ecs.types import EntityId
-from python_ecs.update_status import Demography
 
 
 @dataclass
@@ -81,10 +81,15 @@ class ECS:
 
     @time_func
     def update(self):
-        status = Demography()
         now = time.time()
+        systems = []
+        for _ in self.systems:
+            if isinstance(_, SystemBag):
+                systems.extend(_.subsystems)
+            else:
+                systems.append(_)
 
-        for sys in self.systems:
+        for sys in systems:
             sys_key = sys.__class__
             if sys_key not in self.last_updates:
                 self.last_updates[sys_key] = now
@@ -94,20 +99,21 @@ class ECS:
             self.last_updates[sys_key] = now
 
             try:
-                status.load(sys.update(self.db, elapsed))
+                sys.update(self.db, elapsed)
             except Exception as e:
                 logger.error(f'{sys.__class__.__name__}: {e}\n{traceback.format_exc()}')
-        self.apply_demography(status)
+        self.apply_demography(self.db.dirty)
+        self.db.dirty = Demography()
 
     @time_func
     def apply_demography(self, status: Demography):
         ids = self.db.update_demography(status)
         for sys in self.systems:
-            self.update_demography(sys, status)
+            self._update_demography(sys, status)
         return ids
 
     @time_func
-    def update_demography(self, sys: System, status: Demography):
+    def _update_demography(self, sys: System, status: Demography):
         if sys._signature is None:
             return
 

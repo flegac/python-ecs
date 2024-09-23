@@ -1,3 +1,4 @@
+from dataclasses import field
 from typing import Type
 
 from easy_kit.timing import timing
@@ -7,7 +8,6 @@ from easy_config.my_model import MyModel
 from python_ecs.component import Component, Signature
 from python_ecs.entity_filter import FilterStrategy
 from python_ecs.storage.database import Database
-from python_ecs.update_status import Demography
 
 
 class System[T: Signature | Component](MyModel):
@@ -19,34 +19,31 @@ class System[T: Signature | Component](MyModel):
         self.periodicity_sec = periodicity_sec
         return self
 
-    def update_single(self, item: T, dt: float) -> Demography:
+    def update_single(self, db: Database, item: T, dt: float):
         pass
 
-    def update_before(self, db: Database, dt: float) -> Demography:
+    def update_before(self, db: Database, dt: float):
         pass
 
-    def update_after(self, db: Database, dt: float) -> Demography:
+    def update_after(self, db: Database, dt: float):
         pass
 
-    def register(self, item: T) -> Demography:
+    def register(self, item: T):
         pass
 
-    def unregister(self, item: T) -> Demography:
+    def unregister(self, item: T):
         pass
 
-    def update(self, db: Database, dt: float) -> Demography:
+    def update(self, db: Database, dt: float):
         # with timing(f'ECS.update.{self.__class__.__name__}'):
-        status = Demography()
         with timing(f'ECS.update.{self.__class__.__name__}.update_before'):
-            status.load(self.update_before(db, dt))
+            self.update_before(db, dt)
         with timing(f'ECS.update.{self.__class__.__name__}.update_all'):
-            status.load(self.update_all(db, dt))
+            self.update_all(db, dt)
         with timing(f'ECS.update.{self.__class__.__name__}.update_after'):
-            status.load(self.update_after(db, dt))
-        return status
+            self.update_after(db, dt)
 
     def update_all(self, db: Database, dt: float):
-        status = Demography()
         if self._filter_strategy is FilterStrategy.match_none:
             items = []
         else:
@@ -54,8 +51,7 @@ class System[T: Signature | Component](MyModel):
             # items = list(self.items.values())
 
         for item in items:
-            status.load(self.update_single(item, dt))
-        return status
+            self.update_single(db, item, dt)
 
     def cast(self, items: list[Component]):
         if self._signature is None:
@@ -72,3 +68,12 @@ class System[T: Signature | Component](MyModel):
         if not isinstance(self._signature, type):
             raise ValueError(f'{self.__class__}: Undefined signature: {self._signature}')
         return self
+
+
+class SystemBag(System):
+    _filter_strategy = FilterStrategy.match_none
+    subsystems: list[System] = field(default_factory=list)
+
+    def update_all(self, db: Database, dt: float):
+        for _ in self.subsystems:
+            _.update_all(db, dt)

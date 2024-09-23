@@ -1,14 +1,15 @@
 import uuid
 from typing import override
 
-from easy_kit.timing import TimingTestCase, time_func
+from easy_kit.timing import TimingTestCase
 from pydantic import Field
 
 from python_ecs.component import Component, Signature
 from python_ecs.ecs import ECS
 from python_ecs.entity_filter import FilterStrategy
+from python_ecs.storage.database import Database
 from python_ecs.system import System
-from python_ecs.update_status import Demography
+from python_ecs.demography import Demography
 
 
 class Position(Component):
@@ -33,15 +34,14 @@ class Move(Signature):
 class MoveSystem(System[Move]):
     _signature = Move
 
-    @time_func
     @override
-    def update_single(self, item: Move, dt: float):
+    def update_single(self, db: Database, item: Move, dt: float):
         item.pos.x += item.speed.x
         item.pos.y += item.speed.y
         if item.pos.x > 3:
-            return Demography.remove(item.eid)
+            return Demography().with_death(item.eid)
         if item.speed.y == 0:
-            return Demography.add([
+            return Demography().with_birth([
                 [Info()],
                 [Info()],
                 [Info(), Position(x=0, y=10), Speed(x=0, y=2)],
@@ -53,7 +53,7 @@ class LogSystem(System):
     _filter_strategy = FilterStrategy.match_all
 
     @override
-    def update_single(self, items: list[Component], dt: float):
+    def update_single(self, db: Database, item: list[Component], dt: float):
         eid = None
         for _ in filter(None, items):
             eid = _.eid
@@ -70,7 +70,7 @@ class TestEcs(TimingTestCase):
         ])
 
         # create some entities
-        demography = Demography.add([
+        demography = Demography().with_birth([
             Info(),
             [Info(), Position(x=3)],
             [Info(), Speed(x=2, y=1)],
