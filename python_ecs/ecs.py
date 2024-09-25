@@ -116,21 +116,26 @@ class ECS:
     def _update_demography(self, sys: System, status: Demography):
         if sys._signature is None:
             return
-
-        index = self.db.get_index(sys)
-        items = index.items
         for _ in status.death:
-            item = items.pop(_, None)
-            if item:
-                sys.unregister(item)
+            self._handle_death(sys, _)
         for _ in status.birth:
-            if isinstance(_, Component):
-                _ = [_]
-            item = sys.cast(_)
-            if item is not None:
-                if item.eid not in items:
-                    items[item.eid] = item
-                    sys.register(item)
+            self._handle_birth(sys, _)
+
+    def _handle_birth(self, sys: System, items: Component | list[Component]):
+        index = self.db.get_index(sys)
+        if isinstance(items, Component):
+            items = [items]
+        item = sys.cast(items)
+        if item is not None:
+            if item.eid not in index.items:
+                index.items[item.eid] = item
+                sys.register(item)
+
+    def _handle_death(self, sys: System, eid: EntityId):
+        index = self.db.get_index(sys)
+        item = index.pop(eid)
+        if item:
+            sys.unregister(item)
 
 
 # default simulator

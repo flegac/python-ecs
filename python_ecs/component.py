@@ -18,6 +18,9 @@ class Component(MyModel):
 
     ecs: Any = None
 
+    def as_type[T:Signature](self, stype: Type[T]) -> T | None:
+        return self.ecs.db.search(stype, self.eid)
+
     @classmethod
     def signature(cls) -> list[Type[Self]]:
         return [cls]
@@ -61,6 +64,7 @@ class Signature(MyModel):
         ]))
 
     @classmethod
+    @time_func
     @functools.lru_cache()
     def signature(cls) -> list[Type[Component]]:
         return [cls.model_fields[_].annotation for _ in cls.field_names()]

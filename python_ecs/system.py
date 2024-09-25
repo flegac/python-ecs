@@ -35,12 +35,12 @@ class System[T: Signature | Component](MyModel):
         pass
 
     def update(self, db: Database, dt: float):
-        # with timing(f'ECS.update.{self.__class__.__name__}'):
-        with timing(f'ECS.update.{self.__class__.__name__}.update_before'):
+        # with timing(f'ECS.{self.__class__.__name__}'):
+        with timing(f'ECS.{self.__class__.__name__}.update_before'):
             self.update_before(db, dt)
-        with timing(f'ECS.update.{self.__class__.__name__}.update_all'):
+        with timing(f'ECS.{self.__class__.__name__}.update_all'):
             self.update_all(db, dt)
-        with timing(f'ECS.update.{self.__class__.__name__}.update_after'):
+        with timing(f'ECS.{self.__class__.__name__}.update_after'):
             self.update_after(db, dt)
 
     def update_all(self, db: Database, dt: float):

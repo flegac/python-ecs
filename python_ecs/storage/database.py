@@ -19,6 +19,15 @@ class Database:
         self.ecs: Any = None
         self.dirty: Demography = Demography()
 
+    @time_func
+    def search[T:Signature](self, signature: Type[T], eid: EntityId) -> T | None:
+        if signature in self.indexes:
+            return self.indexes[signature].find(eid)
+        items = [self.get(ctype, eid) for ctype in signature.signature()]
+        if None in items:
+            return None
+        return signature.cast(items)
+
     def register(self, items: list[ComponentSet]):
         self.dirty.with_birth(items)
 
