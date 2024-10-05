@@ -1,84 +1,77 @@
-from typing import Type, Iterable, Generator, Any
+from typing import Type, override
 
 from easy_kit.timing import time_func
-
-from python_ecs.component import Component, Signature, ComponentSet
-from python_ecs.demography import Demography
-from python_ecs.id_generator import IdGenerator
-from python_ecs.storage.components import Components
+from python_ecs.component import Component
+from python_ecs.component_set import ComponentSet, flatten_components
+from python_ecs.signature import Signature
+from python_ecs.storage.database_api import DatabaseAPI
+from python_ecs.storage.demography import Demography
+from python_ecs.storage.id_generator import IdGenerator
 from python_ecs.storage.index import Index
 from python_ecs.types import EntityId
 
 EID_GEN = IdGenerator()
 
 
-class Database:
+class Database(DatabaseAPI):
     def __init__(self):
-        self.components: dict[Type[Component], Components] = {}
-        self.indexes: dict[Type[Signature], Index] = {}
-        self.ecs: Any = None
+        self._entities: set[EntityId] = set()
+        self.tables: dict[Type[Component | Signature], Index] = {}
         self.dirty: Demography = Demography()
 
-    @time_func
-    def search[T:Signature](self, signature: Type[T], eid: EntityId) -> T | None:
-        if signature in self.indexes:
-            return self.indexes[signature].find(eid)
-        items = [self.get(ctype, eid) for ctype in signature.signature()]
-        if None in items:
-            return None
-        return signature.cast(items)
+    @override
+    def find_any[T: Component](self, what: Type[T], having: list[Type[Component]] = None) -> T:
+        table = self.get_table(what)
+        eids = table.entities
+        for _ in having or []:
+            eids.intersection_update(self.get_table(_).entities)
 
-    def register(self, items: list[ComponentSet]):
+        if eids:
+            eid = next(iter(eids))
+            return table.read(eid)
+
+    @override
+    def entities(self):
+        return self._entities
+
+    @override
+    def create_all(self, items: list[ComponentSet]):
+        items = list(map(flatten_components, items))
+        for components in items:
+            eid = EID_GEN.new_id()
+            for _ in components:
+                _.eid = eid
+
         self.dirty.with_birth(items)
 
-    def register_destroy(self, ids: EntityId | Iterable[EntityId]):
-        self.dirty.with_death(ids)
+    @override
+    def destroy_all(self, items: Component | Signature | list[Component | Signature]):
+        self.dirty.with_death(items)
 
-    def get_index(self, sys: 'System'):
-        if sys._signature not in self.indexes:
-            self.indexes[sys._signature] = Index(sys._signature)
-        return self.indexes[sys._signature]
-
-    def iter[T:Component](self, ctype: Type[T]) -> Generator[T, Any, None]:
-        if ctype not in self.components:
-            return
-        for _ in self.components[ctype].active.values():
-            yield _
-
-    def get_single[T:Component](self, ctype: Type[T]) -> T:
-        return next(self.iter(ctype))
-
-    @time_func
-    def get[T: Component](self, key: Type[T], eid: EntityId) -> T | None:
-        if key not in self.components:
-            return None
-
-        components = self.components[key]
-        return components.active.get(eid)
-
-    @property
-    @time_func
-    def entities(self) -> set[EntityId]:
-        return set().union(*[set(_.active.keys()) for _ in self.components.values()])
+    @override
+    def get_table[T:Component | Signature](self, ttype: Type[T]) -> Index[T]:
+        if ttype not in self.tables:
+            self.tables[ttype] = Index(ttype=ttype)
+        return self.tables[ttype]
 
     @time_func
     def union_entities(self, signature: list[Type[Component]]):
         res = set()
         for _ in signature:
-            res.update(self.components[_].active.keys())
+            res.update(self.tables[_].by_entity.keys())
         return res
 
     @time_func
-    def common_entities(self, signature: list[Type[Component]]):
+    def intersect_entities(self, signature: list[Type[Component]]):
         if not signature:
             return set()
         first = signature[0]
-        if first not in self.components:
+        if first not in self.tables:
             return set()
 
-        res = set(self.components[first].active.keys())
+        res = self.tables[first].entities
         for _ in signature[1:]:
-            res.intersection_update(self.components[_].active.keys())
+            res.intersection_update(self.tables[_].entities)
             if not res:
                 return res
         return res
@@ -87,29 +80,18 @@ class Database:
 
     @time_func
     def update_demography(self, status: Demography):
-        self.destroy(status.death)
-        return self.new_entities(status.birth)
+        death = status.death
 
-    @time_func
-    def new_entities(self, entities: list[list[Component]]):
-        return [
-            self.add(EntityId(EID_GEN.new_id()), components)
-            for components in entities
-            if components
-        ]
+        self._entities.difference_update(death)
+        for table in self.tables.values():
+            table.destroy_all(death)
 
-    def add(self, eid: EntityId, components: list[Component]):
-        for c in components:
-            if c is None:
-                continue
-            c.ecs = self.ecs
-            ctype = c.type_id
-            if ctype not in self.components:
-                self.components[ctype] = Components(ctype=ctype)
-            self.components[ctype].add(eid, c)
-        return eid
-
-    @time_func
-    def destroy(self, ids: Iterable[EntityId]):
-        for c in self.components.values():
-            c.remove_all(ids)
+        birth = filter(None, status.birth)
+        for components in birth:
+            self._entities.add(components[0].eid)
+            for c in components:
+                if c is None:
+                    continue
+                c.db = self
+                ctype = c.type_id
+                self.get_table(ctype).create(c)
