@@ -1,4 +1,5 @@
 import traceback
+from typing import Type
 
 import time
 from loguru import logger
@@ -17,6 +18,11 @@ class ECS:
         self.db = Database()
         self.systems = systems or []
         self.last_updates = {}
+
+    def find(self, stype: Type[System]):
+        for sys in self.systems:
+            if isinstance(sys, stype):
+                return sys
 
     def create_all(self, items: list[ComponentSet]):
         self.db.create_all(items)
@@ -67,6 +73,8 @@ class ECS:
     def _handle_birth(self, sys: System, items: Component | list[Component]):
         if isinstance(items, Component):
             items = [items]
+        for item in items:
+            item.db = self.db
         signature = sys._signature
         item = signature.cast(items)
         if item is not None:
